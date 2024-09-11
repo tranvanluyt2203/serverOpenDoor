@@ -3,6 +3,9 @@ from app.models import *
 from flask import request
 from app.utils.responses import error_response, success_response, list_response
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from . import model_humidity, model_rain, model_temp, scaler_humidity, scaler_rain, scaler_temp
+import numpy as np
+import pandas as pd
 
 
 @app.route("/", methods=["GET"])
@@ -53,65 +56,45 @@ def login():
     user = User.query.filter_by(account_id=account.id).first()
     return success_response(data={'access_token': account.access_token, 'user': user.to_dict()},message='Login successful',status_code=200)
 
-# @app.route(API_PUSH_IMAGE,methods=["POST"])
-# def push_image_to_storage():
-#     local_image_path = "images/captured_image.jpg"
-    
-#     storage_path = "images/avt/captured_image.jpg"
-#     cap = cv2.VideoCapture(0)  
-#     if not cap.isOpened():
-#         print("Không thể mở camera")
-#         return
+@app.route('/predict', methods=['POST'])
+def predict_weather():
+    hours_past = 4
+    data = request.json
+    temp_history = data['temp_history']
+    humidity_history = data['humidity_history']
+    hours_ahead = data['hours_ahead']
 
-#     ret, frame = cap.read()
-#     if ret:
-#         cv2.imwrite(local_image_path, frame) 
-#         print(f"Đã chụp ảnh và lưu tại {local_image_path}")
-#     else:
-#         print("Không thể chụp ảnh")
+    if len(temp_history) != hours_past or len(humidity_history) != hours_past:
+        return error_response(message=f"Cần cung cấp {hours_past} giá trị nhiệt độ và độ ẩm gần nhất",status_code=400)
 
-#     cap.release()
-#     cv2.destroyAllWindows()
+    predictions = []
 
+    for _ in range(hours_ahead):
+        input_data = np.array(temp_history + humidity_history + [0, 0]).reshape(1, -1)
+        
+        feature_names = [f'Temp_-{h}h' for h in range(1, hours_past + 1)] + \
+                        [f'Humidity_-{h}h' for h in range(1, hours_past + 1)] + \
+                        ['Hour', 'DayOfWeek']
 
+        input_data_df = pd.DataFrame(input_data, columns=feature_names)
 
-#     bucket = storage.bucket()
-#     blob = bucket.blob(storage_path)
-#     blob.upload_from_filename(local_image_path)
-#     print(f"File uploaded successfully to {storage_path}!")
-#     return (
-#         jsonify(
-#             {
-#                 "success": True,
-#                 "status": 201,
-#                 "message": "pushSuccess",
-#             }
-#         ),
-#         201,
-#     )
-# @app.route(API_GET_IMAGE,methods=["GET"])
-# def get_image_from_storage():
-#     storage_path = "images/avt/captured_image.jpg"
-#     # Đường dẫn lưu trữ ảnh cục bộ sau khi tải về
-#     local_image_path = "images/downloaded_image.jpg"
-#     bucket = storage.bucket()
-#     blob = bucket.blob(storage_path)
-    
-#     # Tải file từ Firebase Storage về máy cục bộ
-#     blob.download_to_filename(local_image_path)
-#     print(f"File downloaded successfully to {local_image_path}!")
-#     return (
-#         jsonify(
-#             {
-#                 "success": True,
-#                 "status": 201,
-#                 "message": "get_image_success",
-#             }
-#         ),
-#         201,
-#     )
+        input_data_scaled_rain = scaler_rain.transform(input_data_df)
+        input_data_scaled_temp = scaler_temp.transform(input_data_df)
+        input_data_scaled_humidity = scaler_humidity.transform(input_data_df)
 
+        rain_prob = model_rain.predict_proba(input_data_scaled_rain)[0][1]
+        temp_forecast = model_temp.predict(input_data_scaled_temp)[0]
+        humidity_forecast = model_humidity.predict(input_data_scaled_humidity)[0]
 
+        predictions.append((temp_forecast, humidity_forecast, rain_prob))
 
-# if __name__ == "__main__":    
-#     app.run(debug=True)
+        temp_history.append(temp_forecast)
+        humidity_history.append(humidity_forecast)
+        temp_history.pop(0)
+        humidity_history.pop(0)
+
+    return success_response(data={
+        'temp_forecast': [float(p[0]) for p in predictions],
+        'humidity_forecast': [float(p[1]) for p in predictions],
+        'rain_prob': [float(p[2]) for p in predictions]
+    },message='Prediction successful',status_code=200)
