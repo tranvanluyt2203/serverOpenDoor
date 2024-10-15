@@ -64,9 +64,31 @@ def login():
 def predict_weather():
     hours_past = 4
     data = request.json
-    temp_history = data['temp_history']
-    humidity_history = data['humidity_history']
     hours_ahead = data['hours_ahead']
+    now = datetime.now()
+    start_time = now - timedelta(hours=hours_past)
+    
+    weather_data = (
+        db.session.query(
+            func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).label('hour'),
+            func.avg(Weather.temp).label('avg_temperature'),
+            func.avg(Weather.humidity).label('avg_humidity')
+        )
+        .filter(Weather.created_at >= start_time)
+        .group_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at))
+        .order_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).asc())
+        .all()
+    )
+    
+    # Chuyển đổi dữ liệu thành list of dictionaries
+    weather_list = [{
+        'hour': w.hour,
+        'avg_temperature': round(w.avg_temperature, 2),
+        'avg_humidity': round(w.avg_humidity, 2)
+    } for w in weather_data]
+    temp_history = [w['avg_temperature'] for w in weather_list]
+    humidity_history = [w['avg_humidity'] for w in weather_list]
+
 
     if len(temp_history) != hours_past or len(humidity_history) != hours_past:
         return error_response(message=f"Cần cung cấp {hours_past} giá trị nhiệt độ và độ ẩm gần nhất",status_code=400)
@@ -141,7 +163,7 @@ def generate_bulk_weather():
 @app.route('/weather', methods=['GET'])
 def get_weather():
     now = datetime.now()
-    start_time = now - timedelta(hours=24)
+    start_time = now - timedelta(hours=4)
     
     # Truy vấn và tổng hợp dữ liệu thời tiết trong 24 giờ qua
     weather_data = (
