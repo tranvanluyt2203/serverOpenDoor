@@ -6,6 +6,10 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from . import model_humidity, model_rain, model_temp, scaler_humidity, scaler_rain, scaler_temp
 import numpy as np
 import pandas as pd
+from datetime import datetime, timedelta
+from sqlalchemy import func
+import random
+
 
 
 @app.route("/", methods=["GET"])
@@ -98,3 +102,69 @@ def predict_weather():
         'humidity_forecast': [float(p[1]) for p in predictions],
         'rain_prob': [float(p[2]) for p in predictions]
     },message='Prediction successful',status_code=200)
+
+
+@app.route('/weather', methods=['POST'])
+def add_weather():
+    data = request.json
+    temp = data['temp']
+    humidity = data['humidity']
+
+    weather = Weather(temp=temp, humidity=humidity)
+    db.session.add(weather)
+    db.session.commit()
+
+    return success_response(data=weather.to_dict(),message='Weather added successfully',status_code=201)
+
+@app.route('/generate_bulk_weather', methods=['POST'])
+def generate_bulk_weather():
+    num_records = request.json.get('num_records', 100)  # Mặc định là 100 bản ghi
+    hours_back = request.json.get('hours_back', 24)  # Mặc định là 24 giờ
+
+    end_time = datetime.now()
+    start_time = end_time - timedelta(hours=hours_back)
+
+    generated_records = []
+
+    for _ in range(num_records):
+        temp = round(random.uniform(20, 35), 2)
+        humidity = round(random.uniform(30, 80), 2)
+        created_at = start_time + timedelta(seconds=random.randint(0, hours_back * 3600))
+
+        weather = Weather(temp=temp, humidity=humidity, created_at=created_at)
+        db.session.add(weather)
+        generated_records.append(weather.to_dict())
+
+    db.session.commit()
+    return success_response(data=generated_records,message='Weather data generated successfully',status_code=201)
+
+@app.route('/weather', methods=['GET'])
+def get_weather():
+    now = datetime.now()
+    start_time = now - timedelta(hours=24)
+    
+    # Truy vấn và tổng hợp dữ liệu thời tiết trong 24 giờ qua
+    weather_data = (
+        db.session.query(
+            func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).label('hour'),
+            func.avg(Weather.temp).label('avg_temperature'),
+            func.avg(Weather.humidity).label('avg_humidity')
+        )
+        .filter(Weather.created_at >= start_time)
+        .group_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at))
+        .order_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).asc())
+        .all()
+    )
+    
+    # Chuyển đổi dữ liệu thành list of dictionaries
+    weather_list = [{
+        'hour': w.hour,
+        'avg_temperature': round(w.avg_temperature, 2),
+        'avg_humidity': round(w.avg_humidity, 2)
+    } for w in weather_data]
+    return success_response( data=weather_list,message='Weather data retrieved successfully',status_code=200) 
+#  get time now 
+@app.route('/time', methods=['GET'])
+def get_time():
+    now = datetime.now()
+    return success_response(data={'time': now},message='Time retrieved successfully',status_code=200)

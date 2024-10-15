@@ -1,6 +1,7 @@
 from app import db
 from werkzeug.security import generate_password_hash, check_password_hash
-
+import pytz
+from datetime import datetime
 class Account(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     password = db.Column(db.String(64), nullable=False)
@@ -37,4 +38,16 @@ class User(db.Model):
             'email': self.email
         }
     
-
+class Weather(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    temp = db.Column(db.Float, nullable=False)
+    humidity = db.Column(db.Float, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now())
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'temp': self.temp,
+            'humidity': self.humidity,
+            'created_at': self.created_at
+        }
