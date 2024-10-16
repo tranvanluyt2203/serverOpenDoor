@@ -66,7 +66,7 @@ def predict_weather():
     data = request.json
     hours_ahead = data['hours_ahead']
     now = datetime.now()
-    start_time = now - timedelta(hours=hours_past)
+    start_time = now - timedelta(hours=4)
     
     weather_data = (
         db.session.query(
@@ -88,6 +88,13 @@ def predict_weather():
     } for w in weather_data]
     temp_history = [w['avg_temperature'] for w in weather_list]
     humidity_history = [w['avg_humidity'] for w in weather_list]
+
+    print(temp_history)
+    print(humidity_history)
+
+    if(len(temp_history) == 5):
+        temp_history.pop(0)
+        humidity_history.pop(0)
 
 
     if len(temp_history) != hours_past or len(humidity_history) != hours_past:
