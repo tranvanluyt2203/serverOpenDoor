@@ -68,19 +68,29 @@ def predict_weather():
     now = datetime.now()
     start_time = now - timedelta(hours=4)
     
+    # weather_data = (
+    #     db.session.query(
+    #         func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).label('hour'),
+    #         func.avg(Weather.temp).label('avg_temperature'),
+    #         func.avg(Weather.humidity).label('avg_humidity')
+    #     )
+    #     .filter(Weather.created_at >= start_time)
+    #     .group_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at))
+    #     .order_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).asc())
+    #     .all()
+    # )
     weather_data = (
-        db.session.query(
-            func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).label('hour'),
-            func.avg(Weather.temp).label('avg_temperature'),
-            func.avg(Weather.humidity).label('avg_humidity')
-        )
-        .filter(Weather.created_at >= start_time)
-        .group_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at))
-        .order_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).asc())
-        .all()
+    db.session.query(
+        func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).label('hour'),
+        func.avg(Weather.temp).label('avg_temperature'),
+        func.avg(Weather.humidity).label('avg_humidity')
+    )
+    .group_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at))
+    .order_by(func.strftime('%Y-%m-%d %H:00:00', Weather.created_at).desc())
+    .limit(4)  
+    .all()
     )
     
-    # Chuyển đổi dữ liệu thành list of dictionaries
     weather_list = [{
         'hour': w.hour,
         'avg_temperature': round(w.avg_temperature, 2),
@@ -125,11 +135,13 @@ def predict_weather():
         humidity_history.append(humidity_forecast)
         temp_history.pop(0)
         humidity_history.pop(0)
-
+    latest_record = db.session.query(Weather).order_by(Weather.created_at.desc()).first()
+    latest_temp = round(latest_record.temp, 2)
+    latest_humidity = round(latest_record.humidity, 2)
     return success_response(data={
-        'temp_forecast': [float(p[0]) for p in predictions],
-        'humidity_forecast': [float(p[1]) for p in predictions],
-        'rain_prob': [float(p[2]) for p in predictions]
+        'temp_forecast': [latest_temp] + [float(p[0]) for p in predictions],
+        'humidity_forecast': [latest_humidity]+[float(p[1]) for p in predictions],
+        'rain_prob': [60]+[float(p[2]) for p in predictions]
     },message='Prediction successful',status_code=200)
 
 
@@ -142,7 +154,7 @@ def add_weather():
     print("temp",temp)
     print("humidity",humidity)
 
-    weather = Weather(temp=temp, humidity=humidity)
+    weather = Weather(temp=temp, humidity=humidity, created_at=datetime.now())
     db.session.add(weather)
     db.session.commit()
 
