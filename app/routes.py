@@ -138,6 +138,9 @@ def add_weather():
     data = request.json
     temp = data['temp']
     humidity = data['humidity']
+    
+    print("temp",temp)
+    print("humidity",humidity)
 
     weather = Weather(temp=temp, humidity=humidity)
     db.session.add(weather)
@@ -197,3 +200,14 @@ def get_weather():
 def get_time():
     now = datetime.now()
     return success_response(data={'time': now},message='Time retrieved successfully',status_code=200)
+
+@app.route('/data', methods=['POST'])
+def receive_data():
+    temperature = request.form.get('temperature')
+    humidity = request.form.get('humidity')
+    
+    if temperature and humidity:
+        print(f"Received Temperature: {temperature}°C, Humidity: {humidity}%")
+        return "Data received successfully", 200
+    else:
+        return "Missing data", 400
