@@ -141,13 +141,14 @@ def predict_weather():
     return success_response(data={
         'temp_forecast': [latest_temp] + [float(p[0]) for p in predictions],
         'humidity_forecast': [latest_humidity]+[float(p[1]) for p in predictions],
-        'rain_prob': [random.choices([0.3,0.35,0.4],weights=[0.8,0.1,0.1],k=1)[0]]+[float(p[2]) for p in predictions]
+        'rain_prob': [random.choices([0.1,0.3,0.35,0.4,0.6],weights=[0.1,0.6,0.1,0.1,0.1],k=1)[0]]+[float(p[2]) for p in predictions]
     },message='Prediction successful',status_code=200)
 
 
 @app.route('/weather', methods=['POST'])
 def add_weather():
     data = request.json
+    print("data = ",data)
     temp = data['temp']
     humidity = data['humidity']
     
